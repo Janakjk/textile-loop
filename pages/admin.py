@@ -55,8 +55,15 @@ with t1:
     else:
         lab = {x.id: f"{x.coll_id} | {x.destination} | {x.status} ({x.quantity_kg:.0f} kg)" for x in r.itertuples()}
         rid = st.selectbox("Select Target Collection Request", list(lab), format_func=lab.get)
-        cur = r[r.id == rid].status.iloc[0]
-        st.caption(f"Current Status: **{cur}**")
+        cur_row = r[r.id == rid].iloc[0]
+        cur = cur_row.status
+        st.caption(f"Current Status: **{cur}** | Batch ID: `{cur_row.reg_id}`")
+        
+        # Display batch photo if available
+        from pathlib import Path
+        img_p = cur_row.image_path
+        if img_p and Path(str(img_p)).exists():
+            st.image(str(img_p), caption=f"Batch Photograph ({cur_row.reg_id})", width=220)
         
         c1, c2 = st.columns([2, 1])
         new = c1.selectbox("Transition To New Status", STATUSES, index=STATUSES.index(cur) if cur in STATUSES else 0, key=f"status_select_{rid}")
