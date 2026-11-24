@@ -1,13 +1,19 @@
+import re
 import sqlite3, hashlib, hmac, secrets
 from contextlib import closing
 from datetime import date, timedelta
 from pathlib import Path
 import pandas as pd
-from classification import classify
+from classification import classify, SUITABLE
 
 DB = Path(__file__).parent / "data" / "textileloop.db"
 UPLOAD_DIR = Path(__file__).parent / "data" / "uploads"
-STATUSES = ["Pending", "Approved", "Scheduled", "Collected", "Processing", "Reused", "Recycled", "Disposed", "Rejected"]
+PROCESSING_OUTCOMES = ("Reused", "Recycled", "Upcycled (Craft Products)")
+STATUSES = ["Pending", "Approved", "Scheduled", "Collected", "Processing", *PROCESSING_OUTCOMES, "Disposed", "Rejected"]
+_PLACE_STOP = {
+    "and", "the", "via", "with", "for", "from", "partners", "partner",
+    "drives", "drive", "through", "confirm", "facility", "service", "area",
+}
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, username TEXT UNIQUE NOT NULL, salt TEXT NOT NULL, pw_hash TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS waste_records(id INTEGER PRIMARY KEY, reg_id TEXT UNIQUE NOT NULL, generator TEXT NOT NULL, institution TEXT NOT NULL,
@@ -19,7 +25,7 @@ CREATE TABLE IF NOT EXISTS collection_requests(id INTEGER PRIMARY KEY, coll_id T
  waste_id INTEGER NOT NULL REFERENCES waste_records(id) ON DELETE CASCADE, recycler_id INTEGER NOT NULL REFERENCES recycler_directory(id),
  quantity_kg REAL NOT NULL CHECK(quantity_kg>0), request_date TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'Pending');
 CREATE TABLE IF NOT EXISTS processing_records(id INTEGER PRIMARY KEY, collection_id INTEGER UNIQUE NOT NULL REFERENCES collection_requests(id) ON DELETE CASCADE,
- outcome TEXT NOT NULL CHECK(outcome IN ('Reused','Recycled')), quantity_kg REAL NOT NULL, verified INTEGER NOT NULL DEFAULT 1, processed_date TEXT NOT NULL);
+ outcome TEXT NOT NULL CHECK(outcome IN ('Reused','Recycled','Upcycled (Craft Products)')), quantity_kg REAL NOT NULL, verified INTEGER NOT NULL DEFAULT 1, processed_date TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS status_log(id INTEGER PRIMARY KEY, collection_id INTEGER NOT NULL REFERENCES collection_requests(id) ON DELETE CASCADE,
  old_status TEXT, new_status TEXT NOT NULL, changed_by TEXT, notes TEXT, changed_at TEXT NOT NULL);
 """
@@ -106,7 +112,7 @@ def set_status(req_id, new, user, notes=""):
         c.execute("UPDATE collection_requests SET status=? WHERE id=?", (new, int(req_id)))
         c.execute("INSERT INTO status_log(collection_id,old_status,new_status,changed_by,notes,changed_at) VALUES(?,?,?,?,?,datetime('now'))",
                   (int(req_id), row[0], new, user, notes.strip() if notes else None))
-        if new in ("Reused", "Recycled"):  # UNIQUE(collection_id) means one processing record per request
+        if new in PROCESSING_OUTCOMES:  # UNIQUE(collection_id) means one processing record per request
             c.execute("INSERT OR REPLACE INTO processing_records(collection_id,outcome,quantity_kg,verified,processed_date) VALUES(?,?,?,1,date('now'))", (int(req_id), new, row[1]))
         else:
             c.execute("DELETE FROM processing_records WHERE collection_id=?", (int(req_id),))
@@ -151,20 +157,56 @@ def check_admin(username, pw):
     return len(df) == 1 and hmac.compare_digest(df.pw_hash[0], _hash(pw, df.salt[0]))
 
 FACILITIES = [
-    ("Eco Regain Solutions Pvt. Ltd.", "Upcycling organization", "All", "Confirm with facility", "Pune", "Confirm directly with the organization",
-     "Pune-based. Accepts old clothes, sorts them into reusable and scrap, and makes handcrafted products such as bags and rugs. Based on published articles (Pune International Centre, Pune365). Confirm it is still operating and which materials it accepts."),
-    ("ReCircle", "Textile recycling company", "All", "Through institutional collection drives", "Pune (drives); partners in Surat and Panipat", "Confirm directly with the organization",
-     "Runs textile collection drives with schools and institutions, sorts items for reuse, recycling or repurposing, and sends unusable fabric to recycling partners. Based on EducationWorld and The Week reports. Confirm intake rules before dispatch."),
-    ("Respun", "Textile recycling company", "All", "Through collection drives", "India", "Confirm directly with the organization",
-     "Collects used clothing from individuals, collection drives, colleges and educational institutions for recycling. Based on a published profile. Confirm intake rules before dispatch."),
-    ("Samajbandh", "NGO", "All", "Confirm with facility", "Pune", "Confirm directly with the organization",
-     "Pune NGO working in tribal and rural areas of Maharashtra. Received old clothes from a published collection drive. Confirm what it currently accepts."),
-    ("SWaCH Pune - V Collect", "NGO", "All", "Confirm via V Collect service", "Pune", "Confirm via swachcoop.com",
-     "Waste picker cooperative working with Pune Municipal Corporation. Its V Collect service takes reusable items including old clothes. Confirm service area and rules."),
-    ("Passco Environmental Solutions Pvt. Ltd.", "Authorized waste collection agency", "All", "Through membership of the facility", "Moshi, Pune", "Confirm directly with the operator",
-     "Operator of a common biomedical waste treatment facility in Pune named in Maharashtra Pollution Control Board documents. Confirm current MPCB authorization before use."),
-    ("Life Secure Enterprises", "Authorized waste collection agency", "All", "Through membership of the facility", "Talegaon Dabhade, Pune", "Confirm directly with the operator",
-     "Common biomedical waste treatment facility in Talegaon Dabhade, Pune, named as an approved facility in a published document. Confirm current MPCB authorization before use."),
+    # Mumbai Cloth Donation & Recycling Centres
+    ("Clothes donation by Hopenlife Foundation", "Donation centre", "All", "Drop-off & scheduled collection drives", "Mumbai",
+     "https://share.google/jv1MqvqCmWuAbq5iy",
+     "Mumbai donation initiative. Accepts wearable garments, clothes, blankets, and textiles for charitable distribution to underprivileged communities."),
+    ("Roadside Family Foundation", "NGO", "All", "Drop-off and local collection", "Mumbai",
+     "https://share.google/BhmnvZN5ZAnxpgbwb",
+     "Mumbai welfare NGO providing clothing support, warm apparel, and essential textiles to roadside and homeless families."),
+    ("ReCircle Head Office (Swachh Sustainable Solutions)", "Textile recycling company", "All", "Institutional drives & commercial pickup", "Mumbai",
+     "https://share.google/1mNvP61uVLKqYheU1",
+     "Leading circular resource recovery enterprise in Mumbai. Collects post-consumer garments, institutional textiles, and routes non-wearable fabrics to recycling partners."),
+    ("Clothing donation center by bombay recycling concern", "Donation centre", "All", "Drop-off center & drives", "Mumbai",
+     "https://share.google/TWpCcBQzKIBGdll2g",
+     "Textile collection and sorting center in Mumbai. Accepts wearable clothing for donation and channels damaged fabric scraps to upcycling/recycling."),
+    ("Sukachi Sawali Welfare Foundation", "NGO", "All", "Drop-off & community drives", "Mumbai",
+     "https://share.google/9XxuOf660UOQJoBlu",
+     "Welfare foundation in Mumbai accepting old clothes, bedsheets, and garments for distribution to marginalized families."),
+
+    # Latur Cloth Donation & Upcycling Centres
+    ("Kanakdhara Charitable Trust Latur", "NGO", "All", "Drop-off & community drives", "Latur",
+     "https://share.google/I8cLJrWD041GFO6KB",
+     "Latur-based charitable trust coordinating cloth donation drives and distribution to rural and drought-affected families in Marathwada."),
+    ("Sakhi Social Enterprise Network", "Upcycling organization", "All", "Artisan collection & workshop drop-off", "Latur",
+     "https://share.google/1cfITxEpOHyPMqz7k",
+     "Social enterprise in Latur empowering rural women artisans. Accepts clean cotton, silk, and fabric scraps for handcrafted textile and artisan upcycling."),
+    ("Bal Vikas Mahila Mandal", "NGO", "All", "Drop-off center & drives", "Latur",
+     "https://share.google/sNLKQk8iizXEDn1Q8",
+     "Women-led NGO in Latur working in child development and women welfare. Collects wearable garments, uniforms, and warm clothing for children and women."),
+    ("Kapada Bank Latur", "Donation centre", "All", "Drop-off & phone coordination", "Latur",
+     "Phone: 7020630453",
+     "Cloth bank initiative in Latur providing free clothing to economically weaker sections. Direct coordination via 7020630453 for drop-off and pickups."),
+
+    # Pune Recycling, Upcycling, NGOs & Clinical Disposal
+    ("Eco Regain Solutions Pvt. Ltd.", "Upcycling organization", "All", "Confirm with facility", "Pune",
+     "Confirm directly with the organization",
+     "Pune-based upcycling enterprise. Accepts old clothes and scrap fabrics to produce handcrafted rugs, bags, and artisan home products."),
+    ("SWaCH Pune - V Collect", "NGO", "All", "V Collect pickup & drop-off centers", "Pune",
+     "https://swachcoop.com",
+     "Waste picker cooperative working with Pune Municipal Corporation. V Collect takes reusable clothes, linens, and apparel for community redistribution."),
+    ("Samajbandh", "NGO", "All", "Community collection drives", "Pune",
+     "Confirm directly with the organization",
+     "Pune NGO working in tribal and rural areas of Maharashtra. Distributes donated clothing, blankets, and garments."),
+    ("Respun", "Textile recycling company", "All", "Collection drives & institutional pickup", "Pune / National",
+     "Confirm directly with the organization",
+     "Collects used clothing from educational institutions, colleges, and drives for fiber regeneration and recycling."),
+    ("Passco Environmental Solutions Pvt. Ltd.", "Authorized waste collection agency", "All", "Through institutional membership", "Moshi, Pune",
+     "Authorized MPCB handler",
+     "Common biomedical waste treatment facility in Moshi, Pune. Strictly authorized for clinical and hazardous healthcare textiles."),
+    ("Life Secure Enterprises", "Authorized waste collection agency", "All", "Through institutional membership", "Talegaon Dabhade, Pune",
+     "Authorized MPCB handler",
+     "Common biomedical waste treatment facility in Talegaon Dabhade, Pune. Authorized handler for infectious linens and bio-waste."),
 ]
 
 def add_recycler(name, ftype, materials, collection, location, contact, description):
@@ -174,10 +216,114 @@ def add_recycler(name, ftype, materials, collection, location, contact, descript
         c.execute("INSERT INTO recycler_directory(name,ftype,materials,collection,location,contact,description,is_demo) VALUES(?,?,?,?,?,?,?,0)",
                   (name.strip(), ftype, materials.strip() or "All", collection.strip() or "Confirm with facility", location.strip(), contact.strip() or "Confirm directly", description.strip()))
 
+def _place_tokens(text):
+    return {p for p in re.split(r"[^a-z0-9]+", str(text).lower()) if len(p) > 2 and p not in _PLACE_STOP}
+
+def _accepts_material(materials, material):
+    accepted = [m.strip() for m in str(materials).split(",")]
+    return "All" in accepted or material in accepted
+
+def region_score(waste_location, facility_location):
+    """Higher scores mean a closer geographic fit. Exact or contained locations rank above a national listing."""
+    waste = str(waste_location).strip().lower()
+    facility = str(facility_location).strip().lower()
+    if not waste or not facility:
+        return 0
+    if waste == facility or facility in waste:
+        return 100
+    waste_tokens = _place_tokens(waste)
+    facility_tokens = _place_tokens(facility)
+    overlap = waste_tokens & facility_tokens
+    if overlap:
+        return 60 + 10 * len(overlap) - len(facility_tokens - waste_tokens)
+    if "india" in facility_tokens:
+        return 10
+    return 0
+
+def best_partner(waste_id, exclude_ids=()):
+    """Pick the eligible directory partner with the closest category and region fit."""
+    waste = query("SELECT id, material, waste_category, location FROM waste_records WHERE id=?", (int(waste_id),))
+    if waste.empty:
+        return None
+    row = waste.iloc[0]
+    suitable = SUITABLE.get(row.waste_category, [])
+    if not suitable:
+        return None
+    directory = query("SELECT id, name, ftype, materials, location FROM recycler_directory")
+    excluded = {int(i) for i in exclude_ids}
+    ranked = []
+    for partner in directory.itertuples(index=False):
+        if int(partner.id) in excluded or partner.ftype not in suitable:
+            continue
+        if not _accepts_material(partner.materials, row.material):
+            continue
+        score = region_score(row.location, partner.location)
+        ranked.append((
+            score,
+            len(_place_tokens(partner.location)),
+            -suitable.index(partner.ftype),
+            -int(partner.id),
+            {"id": int(partner.id), "name": partner.name, "ftype": partner.ftype, "location": partner.location, "score": score},
+        ))
+    if not ranked:
+        return None
+    ranked.sort(key=lambda item: item[:4], reverse=True)
+    return ranked[0][4]
+
+def _dispatch(waste_id, qty, notes, exclude_ids=()):
+    partner = best_partner(waste_id, exclude_ids)
+    if partner is None:
+        return None
+    partner["coll_id"] = add_request(int(waste_id), partner["id"], float(qty), notes=notes)
+    return partner
+
+def dispatch_new_registration(reg_id):
+    """Create a collection request for a newly registered batch using the best directory match."""
+    waste = query("SELECT id, quantity_kg FROM waste_records WHERE reg_id=?", (reg_id,))
+    if waste.empty:
+        return None
+    return _dispatch(
+        int(waste.id[0]),
+        float(waste.quantity_kg[0]),
+        "Automatically matched at registration by category and region.",
+    )
+
+def rematch_after_rejection(req_id):
+    """Send a rejected quantity to the next eligible partner that has not already been tried."""
+    req = query(
+        "SELECT cr.waste_id, cr.quantity_kg, cr.status, rd.name AS rejected_by "
+        "FROM collection_requests cr JOIN recycler_directory rd ON rd.id=cr.recycler_id WHERE cr.id=?",
+        (int(req_id),),
+    )
+    if req.empty or req.status[0] != "Rejected":
+        return None
+    waste_id = int(req.waste_id[0])
+    tried = query("SELECT recycler_id FROM collection_requests WHERE waste_id=?", (waste_id,))
+    return _dispatch(
+        waste_id,
+        float(req.quantity_kg[0]),
+        f"Automatically re-dispatched after rejection by {req.rejected_by[0]}.",
+        exclude_ids=[int(x) for x in tried.recycler_id.tolist()],
+    )
+
+def _ensure_processing_outcomes(c):
+    row = c.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='processing_records'").fetchone()
+    if row is None or "Upcycled" in (row[0] or ""):
+        return
+    c.executescript("""
+        CREATE TABLE processing_records_new(id INTEGER PRIMARY KEY, collection_id INTEGER UNIQUE NOT NULL REFERENCES collection_requests(id) ON DELETE CASCADE,
+         outcome TEXT NOT NULL CHECK(outcome IN ('Reused','Recycled','Upcycled (Craft Products)')), quantity_kg REAL NOT NULL, verified INTEGER NOT NULL DEFAULT 1, processed_date TEXT NOT NULL);
+        INSERT INTO processing_records_new(id, collection_id, outcome, quantity_kg, verified, processed_date)
+         SELECT id, collection_id, outcome, quantity_kg, verified, processed_date FROM processing_records;
+        DROP TABLE processing_records;
+        ALTER TABLE processing_records_new RENAME TO processing_records;
+    """)
+
 def init_db():
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     with closing(conn()) as c, c:
         c.executescript(SCHEMA)
+        _ensure_processing_outcomes(c)
         # column migrations
         cols_w = [row[1] for row in c.execute("PRAGMA table_info(waste_records)").fetchall()]
         if "image_path" not in cols_w:
@@ -188,19 +334,10 @@ def init_db():
         # remove the fictional facilities from earlier versions (and requests linked to them)
         c.execute("DELETE FROM collection_requests WHERE recycler_id IN (SELECT id FROM recycler_directory WHERE name LIKE '%(DEMO)')")
         c.execute("DELETE FROM recycler_directory WHERE name LIKE '%(DEMO)'")
-        if c.execute("SELECT COUNT(*) FROM recycler_directory").fetchone()[0] == 0:
-            c.executemany("INSERT INTO recycler_directory(name,ftype,materials,collection,location,contact,description,is_demo) VALUES(?,?,?,?,?,?,?,0)", FACILITIES)
-        if c.execute("SELECT COUNT(*) FROM waste_records").fetchone()[0] == 0:
-            _seed_waste(c)
-
-def _seed_waste(c):
-    wastes = [  # sample waste records only, labelled DEMO
-        ("Demo College Admin (DEMO)", "Sample College of Science", "College", "Uniforms", "Cotton", "Good condition", 120, 100, "Pune"),
-        ("Demo Hostel Warden (DEMO)", "Sample Girls Hostel", "Hostel", "Bedsheets & linen", "Cotton", "Slightly damaged", 80, 70, "Pune"),
-        ("Demo Tailor (DEMO)", "Sample Tailoring Shop", "Tailoring Shop", "Fabric scraps", "Cotton", "Heavily damaged", 45, 40, "Pune"),
-        ("Demo Hotel Manager (DEMO)", "Sample Hotel", "Hotel", "Curtains & drapes", "Polyester", "Slightly damaged", 60, 15, "Pune"),
-        ("Demo Hospital Store (DEMO)", "Sample Clinic", "Hospital", "Clothes", "Cotton", "Contaminated or potentially infectious", 25, 20, "Pune"),
-    ]
-    for g, inst, gc, it, m, cond, kg, ago, loc in wastes:
-        _insert_waste(c, dict(generator=g, institution=inst, gen_category=gc, item_type=it, material=m, cond=cond, quantity_kg=kg, location=loc,
-                              contact="demo@example.com", reg_date=date.today() - timedelta(days=ago), description="Sample record for demonstration", is_demo=1))
+        # remove all demo waste batches and their requests to ensure 100% real database statistics
+        c.execute("DELETE FROM collection_requests WHERE waste_id IN (SELECT id FROM waste_records WHERE is_demo=1)")
+        c.execute("DELETE FROM waste_records WHERE is_demo=1")
+        existing_names = {row[0] for row in c.execute("SELECT name FROM recycler_directory").fetchall()}
+        to_insert = [f for f in FACILITIES if f[0] not in existing_names]
+        if to_insert:
+            c.executemany("INSERT INTO recycler_directory(name,ftype,materials,collection,location,contact,description,is_demo) VALUES(?,?,?,?,?,?,?,0)", to_insert)

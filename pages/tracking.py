@@ -5,7 +5,7 @@ import components as ui
 
 ui.hero("Waste Tracking & Chain of Custody", "Monitor real-time dispatch progress, custody transfers, and verified recovery outcomes", "timeline")
 
-r = requests_df()
+r = requests_df(exclude_demo=True)
 
 status_icon_map = {
     "Pending": "clock",
@@ -15,6 +15,7 @@ status_icon_map = {
     "Processing": "cog",
     "Reused": "shirt",
     "Recycled": "recycle",
+    "Upcycled (Craft Products)": "craft",
     "Disposed": "shield",
     "Rejected": "x_circle"
 }
@@ -27,6 +28,7 @@ status_color_map = {
     "Processing": "#4F46E5",
     "Reused": "#059669",
     "Recycled": "#10B981",
+    "Upcycled (Craft Products)": "#40916C",
     "Disposed": "#0284C7",
     "Rejected": "#DC2626"
 }
@@ -109,6 +111,8 @@ else:
         final_step = "Disposed"
     elif cur == "Recycled":
         final_step = "Recycled"
+    elif cur == "Upcycled (Craft Products)":
+        final_step = "Upcycled (Craft Products)"
     else:
         final_step = "Reused"
     path = ["Pending", "Approved", "Scheduled", "Collected", "Processing", final_step]

@@ -1,92 +1,91 @@
-from pathlib import Path
 import streamlit as st
-from database import query, add_request, remaining
-from classification import MATERIALS, FTYPES, SUITABLE
+from database import query
+from classification import MATERIALS, FTYPES
 import components as ui
 
-ui.hero("Find Recyclers & NGOs", "Verified destination directory and direct collection dispatch management", "building")
+ui.hero("Find Recyclers & NGOs", "Verified destination directory used for automatic category and region matching", "building")
 
-if st.session_state.get("flash_dispatch"):
-    st.success(st.session_state.pop("flash_dispatch"))
-
-st.info("Directory listings represent organizations compiled from institutional disclosures and public directories. Always contact facilities directly to confirm intake guidelines prior to dispatch.")
+st.info("Directory listings represent verified cloth donation centres, NGOs, and recycling facilities. Select your city to easily access local donation and recycling options.")
 
 d = query("SELECT * FROM recycler_directory")
 ok = lambda ms, mat: "All" in [m.strip() for m in ms.split(",")] or mat in [m.strip() for m in ms.split(",")]
 
-st.subheader("Filter Directory")
-a, b, c = st.columns(3)
-mat = a.selectbox("Accepted Fiber", ["Any"] + MATERIALS)
-ft = b.selectbox("Facility Classification", ["Any"] + FTYPES)
-loc = c.text_input("Filter by Location", placeholder="e.g. Pune, Moshi, Surat")
+st.subheader("Filter Directory by City & Organization")
+
+# Quick City Filter
+city_options = ["All Cities", "Mumbai", "Pune", "Latur", "Other Regions"]
+c1, c2, c3 = st.columns([1.2, 1, 1])
+selected_city = c1.selectbox("Select City", city_options, key="rec_city_filter")
+mat = c2.selectbox("Accepted Fiber", ["Any"] + MATERIALS, key="rec_mat_filter")
+ft = c3.selectbox("Facility Classification", ["Any"] + FTYPES, key="rec_ftype_filter")
+
+search_kw = st.text_input("Quick Search (Name, Locality, or Keyword)", placeholder="e.g. Hopenlife, Kapada Bank, ReCircle, Sakhi, Moshi, Roadside", key="rec_kw_filter").strip()
 
 v = d
+# City filtering
+if selected_city == "Mumbai":
+    v = v[v.location.str.contains("Mumbai", case=False, na=False)]
+elif selected_city == "Pune":
+    v = v[v.location.str.contains("Pune|Moshi|Talegaon", case=False, na=False)]
+elif selected_city == "Latur":
+    v = v[v.location.str.contains("Latur", case=False, na=False)]
+elif selected_city == "Other Regions":
+    v = v[~v.location.str.contains("Mumbai|Pune|Moshi|Talegaon|Latur", case=False, na=False)]
+
+# Fiber & classification filters
 if mat != "Any":
     v = v[v.materials.apply(lambda m: ok(m, mat))]
 if ft != "Any":
     v = v[v.ftype == ft]
-if loc:
-    v = v[v.location.str.contains(loc, case=False, regex=False)]
-
-display_cols = {
-    "name": "Organization / Facility",
-    "ftype": "Facility Type",
-    "materials": "Accepted Materials",
-    "collection": "Collection Method",
-    "location": "Operational Region",
-    "contact": "Contact Channel",
-    "description": "Intake Scope & Capability"
-}
-v_display = v[list(display_cols.keys())].rename(columns=display_cols)
-st.dataframe(v_display, hide_index=True, width="stretch")
-
-st.subheader("Dispatch Collection Request")
-w = query("SELECT id, reg_id, material, waste_category, quantity_kg, image_path FROM waste_records ORDER BY id DESC")
-w["rem"] = w.id.apply(remaining)
-w = w[w.rem > 0]
-
-if w.empty:
-    st.info("All registered waste batches have already been allocated to active collection requests.")
-else:
-    c1, c2 = st.columns([1, 1])
-    i = c1.selectbox(
-        "Select Pending Waste Batch",
-        w.index,
-        format_func=lambda idx: f"{w.loc[idx, 'reg_id']} | {w.loc[idx, 'material']} ({w.loc[idx, 'rem']:.1f} kg available)"
+if search_kw:
+    kw_mask = (
+        v.name.str.contains(search_kw, case=False, na=False) |
+        v.description.str.contains(search_kw, case=False, na=False) |
+        v.location.str.contains(search_kw, case=False, na=False) |
+        v.contact.str.contains(search_kw, case=False, na=False)
     )
-    r = w.loc[i]
-    opts = d[d.ftype.isin(SUITABLE[r.waste_category]) & d.materials.apply(lambda m: ok(m, r.material))]
-    
-    st.caption(f"Batch Category: **{r.waste_category}** — Directory filtered strictly to eligible destinations.")
-    
-    if r.image_path and Path(str(r.image_path)).exists():
-        st.image(str(r.image_path), caption=f"Batch Photograph ({r.reg_id})", width=220)
-    
-    if opts.empty:
-        st.error("No eligible facility matching this material and category was found in the directory.")
-    else:
-        j = c2.selectbox(
-            "Target Destination Facility",
-            opts.index,
-            format_func=lambda idx: f"{opts.loc[idx, 'name']} ({opts.loc[idx, 'location']})",
-            key=f"target_fac_{r.id}"
-        )
-        max_q = float(r.rem)
-        min_q = min(0.1, max_q)
-        q = st.number_input(
-            "Dispatch Quantity (kg)",
-            min_value=min_q,
-            max_value=max_q,
-            value=max_q,
-            step=0.5 if max_q < 5 else 1.0,
-            key=f"dispatch_q_{r.id}"
-        )
-        dispatch_notes = st.text_input("Dispatch Remarks / Pickup Logistics Instructions", placeholder="e.g. Packed in labelled bags, loading dock available", key=f"disp_notes_{r.id}")
-        
-        if st.button("Submit Collection Request", key=f"btn_dispatch_{r.id}"):
-            try:
-                cid = add_request(r.id, opts.loc[j, "id"], q, notes=dispatch_notes)
-                st.session_state["flash_dispatch"] = f"Collection request initiated successfully. Unique Tracking ID: **{cid}**"
-                st.rerun()
-            except ValueError as e:
-                st.error(str(e))
+    v = v[kw_mask]
+
+st.markdown(f"**Showing {len(v)} verified organization(s)** for **{selected_city}**:")
+
+if v.empty:
+    st.warning("No facilities match the selected filter criteria. Try choosing 'All Cities' or clearing the search keyword.")
+else:
+    display_cols = {
+        "name": "Organization / Facility",
+        "ftype": "Facility Type",
+        "location": "Operational City / Region",
+        "materials": "Accepted Materials",
+        "collection": "Collection Method",
+        "contact": "Contact Channel / Location Link",
+        "description": "Intake Scope & Capability"
+    }
+    v_display = v[list(display_cols.keys())].rename(columns=display_cols)
+    st.dataframe(v_display, hide_index=True, width="stretch")
+
+    st.subheader("📍 Direct Contact & Map Navigation")
+    fac_choices = {row.id: f"{row.name} ({row.location} — {row.ftype})" for row in v.itertuples()}
+    target_id = st.selectbox("Select Organization for Direct Contact & Location Links", list(fac_choices), format_func=fac_choices.get, key="direct_fac_select")
+    selected_fac = v[v.id == target_id].iloc[0]
+
+    contact_val = str(selected_fac.contact).strip()
+    is_link = contact_val.startswith("http://") or contact_val.startswith("https://")
+
+    col_details, col_action = st.columns([2, 1])
+    with col_details:
+        st.markdown(f"""
+        ### {selected_fac['name']}
+        * **Classification:** `{selected_fac.ftype}`
+        * **Operational City / Region:** {selected_fac.location}
+        * **Accepted Materials:** {selected_fac.materials}
+        * **Collection / Drop-off Method:** {selected_fac.collection}
+        * **Scope & Guidelines:** {selected_fac.description}
+        """)
+    with col_action:
+        st.markdown("#### Direct Action")
+        if is_link:
+            st.link_button("🗺️ Open Google Maps Location", contact_val, type="primary")
+        elif "Phone:" in contact_val or any(c.isdigit() for c in contact_val):
+            st.success(f"📞 **Direct Phone:** {contact_val}")
+        else:
+            st.info(f"**Contact Channel:** {contact_val}")

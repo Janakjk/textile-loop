@@ -1,42 +1,38 @@
-from database import query, requests_df
+from database import PROCESSING_OUTCOMES, query, requests_df
 
 def _sum(df):
     return float(df.quantity_kg.sum()) if len(df) else 0.0
 
-def stats(exclude_demo=False):
-    """Calculate circularity metrics. Optionally exclude sample/demo records for actual live statistics."""
-    w_filter = "WHERE is_demo=0" if exclude_demo else ""
-    total = _sum(query(f"SELECT quantity_kg FROM waste_records {w_filter}"))
-    r = requests_df(exclude_demo=exclude_demo)
-    
-    p_sql = ("SELECT p.outcome, p.quantity_kg, rd.ftype "
-             "FROM processing_records p "
-             "JOIN collection_requests cr ON cr.id=p.collection_id "
-             "JOIN waste_records w ON w.id=cr.waste_id "
-             "JOIN recycler_directory rd ON rd.id=cr.recycler_id "
-             "WHERE p.verified=1 ")
-    if exclude_demo:
-        p_sql += "AND w.is_demo=0 "
-    p = query(p_sql)
-    
-    # Donated specifically via NGOs & Donation centres vs general reuse vs mechanical recycling
+def stats():
+    """Circularity metrics from registered batches only. Sample records are excluded, so an empty registry is 0 kg."""
+    total = _sum(query("SELECT quantity_kg FROM waste_records WHERE is_demo=0"))
+    r = requests_df(exclude_demo=True)
+    p = query(
+        "SELECT p.outcome, p.quantity_kg, rd.ftype "
+        "FROM processing_records p "
+        "JOIN collection_requests cr ON cr.id=p.collection_id "
+        "JOIN waste_records w ON w.id=cr.waste_id "
+        "JOIN recycler_directory rd ON rd.id=cr.recycler_id "
+        "WHERE p.verified=1 AND w.is_demo=0"
+    )
     donated = _sum(p[(p.outcome == "Reused") & (p.ftype.isin(["Donation centre", "NGO"]))])
     reused = _sum(p[p.outcome == "Reused"])
     recycled = _sum(p[p.outcome == "Recycled"])
-    
-    collected = _sum(r[r.status.isin(["Collected", "Processing", "Reused", "Recycled", "Disposed"])])
+    upcycled = _sum(p[p.outcome == "Upcycled (Craft Products)"])
+    collected_states = ["Collected", "Processing", *PROCESSING_OUTCOMES, "Disposed"]
+    collected = _sum(r[r.status.isin(collected_states)])
     disposal = _sum(r[r.status.isin(["Collected", "Processing", "Disposed"]) & (r.ftype == "Authorized waste collection agency")])
-    diverted = reused + recycled
+    diverted = reused + recycled + upcycled
     pending = _sum(r[r.status.isin(["Pending", "Approved", "Scheduled"])])
     in_process = _sum(r[r.status == "Processing"])
     active_partners = int(query("SELECT COUNT(DISTINCT id) AS n FROM recycler_directory").n[0])
-    
     return dict(
         total=total,
         collected=collected,
         donated=donated,
         reused=reused,
         recycled=recycled,
+        upcycled=upcycled,
         disposal=disposal,
         diverted=diverted,
         pending=pending,

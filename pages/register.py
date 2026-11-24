@@ -1,7 +1,7 @@
 import re
 from datetime import date
 import streamlit as st
-from database import add_waste
+from database import add_waste, dispatch_new_registration
 from classification import *
 import components as ui
 
@@ -66,7 +66,15 @@ if go:
             description=desc.strip(),
             file_obj=active_img
         ))
-        st.success(f"Registration successful. System Tracking Identifier: **{reg}**")
+        match = dispatch_new_registration(reg)
+        if match:
+            st.success(
+                f"Registration successful. System Tracking Identifier: **{reg}**. "
+                f"Matched to **{match['name']}** ({match['location']}) and collection request **{match['coll_id']}** was created."
+            )
+        else:
+            st.success(f"Registration successful. System Tracking Identifier: **{reg}**")
+            st.warning("No eligible partner matched this category and region. The batch is saved and remains unallocated.")
         if active_img:
             st.info("Batch photograph stored and linked to Registration ID.")
         ui.result_card(classify(mat, cond, gc))

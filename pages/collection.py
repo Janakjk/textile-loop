@@ -1,6 +1,6 @@
 from pathlib import Path
 import streamlit as st
-from database import requests_df, set_status, query, STATUSES
+from database import requests_df, set_status, rematch_after_rejection, query, STATUSES
 import components as ui
 
 ui.hero("Collection Requests & Partner Portal", "Comprehensive ledger of dispatch requests, logistics status, and authorized partner updates", "truck")
@@ -8,7 +8,7 @@ ui.hero("Collection Requests & Partner Portal", "Comprehensive ledger of dispatc
 if st.session_state.get("flash_collection"):
     st.success(st.session_state.pop("flash_collection"))
 
-r = requests_df()
+r = requests_df(exclude_demo=True)
 
 t1, t2 = st.tabs(["Dispatch Requests Ledger", "Collection Partner Update Portal"])
 
@@ -26,7 +26,7 @@ with t1:
         filtered_r = filtered_r[filtered_r.destination.isin(pick_dest)]
 
     if filtered_r.empty:
-        st.info("No collection requests found matching your filter criteria. Create requests from the Find Recyclers & NGOs directory.")
+        st.info("No collection requests found. Submitting a waste registration creates one automatically when a partner matches.")
     else:
         display_cols = {
             "coll_id": "Collection Tracking ID",
@@ -89,8 +89,22 @@ with t2:
                 new_st = st.selectbox("New Custody Status", STATUSES, index=STATUSES.index(selected_row.status) if selected_row.status in STATUSES else 0)
                 notes_input = st.text_input("Logistics Remarks / Custody Notes", placeholder="e.g. Dispatched transport vehicle MH-12-3456, goods received at processing dock")
                 if st.form_submit_button("Submit Partner Status Update"):
+                    rejecting = new_st == "Rejected" and selected_row.status != "Rejected"
                     set_status(target_req_id, new_st, f"Partner: {partner_name}", notes=notes_input)
-                    st.session_state["flash_collection"] = f"Request {selected_row.coll_id} updated to '{new_st}' by {partner_name}."
+                    if rejecting:
+                        rematch = rematch_after_rejection(target_req_id)
+                        if rematch:
+                            st.session_state["flash_collection"] = (
+                                f"Request {selected_row.coll_id} was rejected by {partner_name}. "
+                                f"It was automatically re-dispatched to **{rematch['name']}** ({rematch['location']}) as **{rematch['coll_id']}**."
+                            )
+                        else:
+                            st.session_state["flash_collection"] = (
+                                f"Request {selected_row.coll_id} was rejected by {partner_name}. "
+                                "No further eligible partner is available, so the batch is unallocated."
+                            )
+                    else:
+                        st.session_state["flash_collection"] = f"Request {selected_row.coll_id} updated to '{new_st}' by {partner_name}."
                     st.rerun()
 
 st.caption("All status transitions, operator IDs, and timestamps are logged into the audited chain of custody.")

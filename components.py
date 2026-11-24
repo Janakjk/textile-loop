@@ -27,6 +27,7 @@ SVG_ICONS = {
     "search": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
     "users": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
     "heart": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>',
+    "craft": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><path d="M8.12 8.12 12 12"/><path d="M20 4 8.12 15.88"/><circle cx="6" cy="18" r="3"/><path d="M14.8 14.8 20 20"/></svg>',
     "map_pin": '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>',
     "check": '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
 }
@@ -125,13 +126,13 @@ div[data-baseweb="select"] > div {
 .tl-hero {
     background: linear-gradient(135deg, #0B251B 0%, #153E2D 55%, #1B4332 100%);
     color: #FFFFFF;
-    padding: 24px 28px;
+    padding: 18px 24px;
     border-radius: 14px;
     margin-bottom: 22px;
     box-shadow: 0 4px 20px -2px rgba(11, 37, 27, 0.18);
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 18px;
 }
 .tl-hero-icon {
     width: 48px;
@@ -427,14 +428,15 @@ div[data-baseweb="select"] > div {
 def inject_css():
     st.html(CSS)
 
-def hero(title, sub, icon_name="leaf"):
+def hero(title, sub="", icon_name="leaf"):
+    if sub in SVG_ICONS:
+        icon_name = sub
     icon_html = icon_svg(icon_name, 26, "#52B788")
     render_html(f'''
     <div class="tl-hero">
         <div class="tl-hero-icon">{icon_html}</div>
         <div>
             <h1>{title}</h1>
-            <p>{sub}</p>
         </div>
     </div>
     ''')
@@ -459,7 +461,7 @@ def flow():
         (1, "package", "Generate", "Institutional source logging"),
         (2, "document", "Register", "Capture fiber, weight & condition"),
         (3, "category", "Classify", "Rule-based waste categorisation"),
-        (4, "users", "Match", "Connect with verified recyclers"),
+        (4, "users", "Match", "Auto-match by category and region"),
         (5, "truck", "Collect", "Dispatch & status tracking"),
         (6, "leaf", "Measure", "Audit verified landfill diversion")
     ]

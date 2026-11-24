@@ -62,8 +62,19 @@ with t1:
         new = c1.selectbox("Transition To New Status", STATUSES, index=STATUSES.index(cur) if cur in STATUSES else 0, key=f"status_select_{rid}")
         notes = st.text_input("Audit Notes / Operational Remarks", placeholder="e.g. Verified by facility supervisor, pickup scheduled", key=f"admin_notes_{rid}")
         if c2.button("Apply Status Change", key=f"btn_status_{rid}"):
+            rejecting = new == "Rejected" and cur != "Rejected"
             set_status(rid, new, st.session_state["admin"], notes=notes)
-            st.session_state["flash"] = f"Request {r[r.id == rid].coll_id.iloc[0]} transitioned from {cur} to {new}."
+            if rejecting:
+                rematch = rematch_after_rejection(rid)
+                if rematch:
+                    st.session_state["flash"] = (
+                        f"Request {r[r.id == rid].coll_id.iloc[0]} marked Rejected. "
+                        f"Automatically re-matched to **{rematch['name']}** ({rematch['location']}) as **{rematch['coll_id']}**."
+                    )
+                else:
+                    st.session_state["flash"] = f"Request {r[r.id == rid].coll_id.iloc[0]} marked Rejected. No further eligible partner available."
+            else:
+                st.session_state["flash"] = f"Request {r[r.id == rid].coll_id.iloc[0]} transitioned from {cur} to {new}."
             st.rerun()
 
 with t2:

@@ -54,7 +54,7 @@ st.markdown("""
   - `waste_records`: Ingested batch declarations and physical attributes.
   - `recycler_directory`: Verified organizational directory and operational criteria.
   - `collection_requests`: Linked dispatch requests with quantity constraints.
-  - `processing_records`: Audited recovery outcomes (verified reuse vs. recycling).
+  - `processing_records`: Audited recovery outcomes (verified reuse, craft upcycling, or recycling).
   - `status_log`: Append-only historical audit trail of all custody transitions.
 """)
 

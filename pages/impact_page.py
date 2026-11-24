@@ -6,19 +6,14 @@ import components as ui
 
 ui.hero("Environmental Impact & Resource Analytics", "Audited landfill diversion rates, fiber recovery breakdown, and circularity indicators", "analytics")
 
-c_toggle, _ = st.columns([2, 1])
-exclude_demo = c_toggle.toggle("Exclude Sample/Demo Records (Show Actual Live Statistics Only)", value=False, key="impact_demo_toggle")
-
-s = stats(exclude_demo=exclude_demo)
-
-if exclude_demo:
-    st.info("Displaying verified live inventory (demo records excluded).")
+s = stats()
 
 ui.stat_cards([
     ("package", "Registered Material", s["total"]),
     ("truck", "Collected Volume", s["collected"]),
     ("heart", "Donated via NGOs", s["donated"]),
     ("shirt", "Direct Reuse", s["reused"]),
+    ("craft", "Upcycled (Craft Products)", s["upcycled"]),
     ("recycle", "Mechanically Recycled", s["recycled"]),
     ("shield", "Authorized Bio-Disposal", s["disposal"]),
     ("clock", "Pending Requests", s["pending"]),
@@ -33,10 +28,9 @@ with a:
 with b:
     ui.ring(s["recovery"], "Material Recovery Efficiency (of Collected)")
 
-w_sql = "SELECT * FROM waste_records WHERE is_demo=0" if exclude_demo else "SELECT * FROM waste_records"
-w = query(w_sql)
+w = query("SELECT * FROM waste_records WHERE is_demo=0")
 if w.empty:
-    st.info("No recorded waste data available for the selected filter.")
+    st.info("No registered batches yet. Totals stay at 0 kg until a real registration is submitted.")
 else:
     st.subheader("Material & Categorical Analysis")
     
@@ -121,7 +115,7 @@ else:
         c3.plotly_chart(fig_line, width="stretch")
         
     with c4:
-        r = requests_df(exclude_demo=exclude_demo)
+        r = requests_df(exclude_demo=True)
         cnt = r.status.value_counts().reindex(STATUSES, fill_value=0).reset_index()
         cnt.columns = ["status", "requests"]
         fig_status = px.bar(
@@ -140,10 +134,10 @@ else:
     part_df.columns = ["Partner / Facility Name", "Classification", "Operational Region", "Accepted Materials", "Contact Channel"]
     st.dataframe(part_df, hide_index=True, width="stretch")
 
-    st.subheader("Diversion Pathways: Reuse vs. Mechanical Recycling")
+    st.subheader("Diversion Pathways: Reuse, Craft Products, and Mechanical Recycling")
     fig_comp = px.bar(
-        x=["Direct Reuse", "Mechanical Recycling"],
-        y=[s["reused"], s["recycled"]],
+        x=["Direct Reuse", "Upcycled (Craft Products)", "Mechanical Recycling"],
+        y=[s["reused"], s["upcycled"], s["recycled"]],
         title="Diversion Outcomes Comparison (kg)",
         labels={"x": "Recovery Channel", "y": "Quantity Diverted (kg)"},
         color_discrete_sequence=["#1B4332"]

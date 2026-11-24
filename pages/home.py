@@ -4,18 +4,13 @@ import components as ui
 
 ui.hero("TextileLoop Dashboard", "Operational overview of institutional textile waste collection, diversion, and recovery", "dashboard")
 
-c_toggle, _ = st.columns([2, 1])
-exclude_demo = c_toggle.toggle("Exclude Sample/Demo Records (Show Actual Live Statistics Only)", value=False, key="home_demo_toggle")
-
-s = stats(exclude_demo=exclude_demo)
-
-if exclude_demo:
-    st.info("Displaying verified live inventory (demo records excluded).")
+s = stats()
 
 ui.stat_cards([
     ("package", "Total Registered", s["total"]),
     ("truck", "Collected", s["collected"]),
     ("heart", "Donated via NGOs", s["donated"]),
+    ("craft", "Upcycled (Craft Products)", s["upcycled"]),
     ("recycle", "Recycled", s["recycled"]),
     ("cog", "Under Processing", s["in_process"]),
     ("clock", "Pending Dispatch", s["pending"]),
@@ -32,12 +27,13 @@ with a:
 with b:
     ui.segbar([
         ("Reused", s["reused"], "#1B4332"),
+        ("Upcycled (Craft Products)", s["upcycled"], "#40916C"),
         ("Recycled", s["recycled"], "#2D6A4F"),
         ("In Process", s["in_process"], "#52B788"),
         ("Awaiting Collection", s["awaiting"], "#CBD5E1"),
         ("Authorized Disposal", s["disposal"], "#94A3B8")
     ])
-    st.caption("Figures are calculated dynamically from verified database entries. Only audited reuse and recycling count as diversion.")
+    st.caption("Figures come from registered batches only. Audited reuse, craft upcycling, and recycling count as diversion.")
 
 st.subheader("Platform Objectives & Operational Scope")
 st.write(
