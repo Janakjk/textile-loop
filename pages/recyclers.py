@@ -13,13 +13,13 @@ ok = lambda ms, mat: "All" in [m.strip() for m in ms.split(",")] or mat in [m.st
 st.subheader("Filter Directory by City & Organization")
 
 # Quick City Filter
-city_options = ["All Cities", "Mumbai", "Pune", "Latur", "Other Regions"]
+city_options = ["All Cities", "Mumbai", "Pune", "Latur", "Amravati", "Other Regions"]
 c1, c2, c3 = st.columns([1.2, 1, 1])
 selected_city = c1.selectbox("Select City", city_options, key="rec_city_filter")
 mat = c2.selectbox("Accepted Fiber", ["Any"] + MATERIALS, key="rec_mat_filter")
 ft = c3.selectbox("Facility Classification", ["Any"] + FTYPES, key="rec_ftype_filter")
 
-search_kw = st.text_input("Quick Search (Name, Locality, or Keyword)", placeholder="e.g. Hopenlife, Kapada Bank, ReCircle, Sakhi, Moshi, Roadside", key="rec_kw_filter").strip()
+search_kw = st.text_input("Quick Search (Name, Locality, or Keyword)", placeholder="e.g. Hopenlife, Kapada Bank, DISHA, SARE, Gokul, ReCircle", key="rec_kw_filter").strip()
 
 v = d
 # City filtering
@@ -29,8 +29,10 @@ elif selected_city == "Pune":
     v = v[v.location.str.contains("Pune|Moshi|Talegaon", case=False, na=False)]
 elif selected_city == "Latur":
     v = v[v.location.str.contains("Latur", case=False, na=False)]
+elif selected_city == "Amravati":
+    v = v[v.location.str.contains("Amravati", case=False, na=False)]
 elif selected_city == "Other Regions":
-    v = v[~v.location.str.contains("Mumbai|Pune|Moshi|Talegaon|Latur", case=False, na=False)]
+    v = v[~v.location.str.contains("Mumbai|Pune|Moshi|Talegaon|Latur|Amravati", case=False, na=False)]
 
 # Fiber & classification filters
 if mat != "Any":

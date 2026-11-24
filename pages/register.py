@@ -12,7 +12,7 @@ c1, c2 = st.columns(2)
 gen = c1.text_input("Point of Contact / Generator Name", placeholder="e.g. Dr. Rajesh Sharma", key="reg_gen")
 inst = c2.text_input("Institution or Organization", placeholder="e.g. Pune Institute of Technology", key="reg_inst")
 gc = c1.selectbox("Generator Sector", GEN_CATS, key="reg_gc")
-loc = c2.text_input("Facility Location / City", placeholder="e.g. Shivajinagar, Pune", key="reg_loc")
+loc = c2.text_input("Facility Location / City", placeholder="e.g. Pune, Mumbai, Latur, Amravati", key="reg_loc")
 contact = c1.text_input("Contact Email or Phone Number", placeholder="e.g. contact@institution.edu or 9876543210", key="reg_contact")
 rdate = c2.date_input("Registration Date", value=date.today(), max_value=date.today(), key="reg_date")
 

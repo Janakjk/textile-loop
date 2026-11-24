@@ -188,6 +188,26 @@ FACILITIES = [
      "Phone: 7020630453",
      "Cloth bank initiative in Latur providing free clothing to economically weaker sections. Direct coordination via 7020630453 for drop-off and pickups."),
 
+    # Amravati Cloth Donation, NGOs & Upcycling Centres
+    ("DISHA for Victims (Disha Foundation)", "NGO", "All", "Drop-off & community drives", "Amravati",
+     "https://share.google/pt0EL5prC3fakWXv2",
+     "Amravati NGO supporting rehabilitation and victim welfare. Accepts wearable clothing, blankets, and garments for distribution to distressed and vulnerable families."),
+    ("SARE Foundation", "NGO", "All", "Drop-off center & scheduled drives", "Amravati",
+     "https://share.google/aDhiVZ9zoH6dNWrez",
+     "Amravati-based social development foundation. Coordinates textile and cloth collection drives for underprivileged rural and urban communities."),
+    ("Sukhaya Foundation", "Donation centre", "All", "Drop-off & community outreach", "Amravati",
+     "https://share.google/tty5SsSLz7qXPGuSc",
+     "Charitable foundation in Amravati facilitating used clothing donations, warm wear, and household linen distribution for low-income households."),
+    ("Gokul Ashram", "Donation centre", "All", "Direct drop-off at Ashram", "Amravati",
+     "https://share.google/nwP0V84VPUGBNAepk",
+     "Ashram and residential shelter in Amravati. Accepts wearable clothing, blankets, bedsheets, and everyday apparel for resident care and community aid."),
+    ("Hope Multipurpose Society", "NGO", "All", "Drop-off and local collection", "Amravati",
+     "https://share.google/XYsaKIFTNh1Fehcsg",
+     "Multipurpose welfare society operating across Amravati district. Distributes donated garments, educational uniforms, and clothes to underprivileged children and families."),
+    ("Maseera Matching Center & Textile Bank", "Upcycling organization", "All", "Drop-off & artisan coordination", "Amravati",
+     "https://share.google/ZeC5K4eU0MKShnrrW",
+     "Textile and cloth centre in Amravati. Engages in sorting reusable fabrics, matching materials, and coordinating fabric repurposing and local cloth distribution."),
+
     # Pune Recycling, Upcycling, NGOs & Clinical Disposal
     ("Eco Regain Solutions Pvt. Ltd.", "Upcycling organization", "All", "Confirm with facility", "Pune",
      "Confirm directly with the organization",
